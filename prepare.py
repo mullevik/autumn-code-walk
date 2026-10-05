@@ -12,8 +12,9 @@ def main():
     python_path = Path(f"./acw/{_args.day}.py")
     if not python_path.is_file():
         python_path.write_text("def solve(inp: str) -> str:\n    ...")
+        print(f"Written {python_path}")
     else:
-        print(f"Skipping {python_path=} because it exists")
+        print(f"Skipping {python_path} because it exists")
 
     year = "0"
     day = str(int(_args.day) - 1)
@@ -23,6 +24,7 @@ def main():
     input_path = Path(f"inputs/{_args.day}")
     if not input_path.is_file():
         input_path.write_text(content)
+        print(f"Written {len(content)} to {input_path}")
     else:
         print(f"Skipping {input_path=} because it exists")
 
