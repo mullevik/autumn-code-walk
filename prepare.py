@@ -24,7 +24,7 @@ def main():
     input_path = Path(f"inputs/{_args.day}")
     if not input_path.is_file():
         input_path.write_text(content)
-        print(f"Written {len(content)} to {input_path}")
+        print(f"Written {len(content)} chars to {input_path}")
     else:
         print(f"Skipping {input_path=} because it exists")
 

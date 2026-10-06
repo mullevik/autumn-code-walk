@@ -11,7 +11,7 @@ Don't
 Execute a daily task:
 
 ```
-python3 main.py 01 inputs/01
+python3 solve.py 01 inputs/01
 ```
 
 Prepare a daily task:
