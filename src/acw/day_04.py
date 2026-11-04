@@ -133,6 +133,7 @@ def parse_int(inp: bytes) -> tuple[int, bytes]:
 
 
 WS = (b" ", b"\n")
+WS_SET: set[bytes] = set(WS)
 
 
 def parse_string(inp: bytes) -> tuple[str, bytes]:
@@ -175,33 +176,58 @@ def parse_bool(inp: bytes) -> tuple[bool, bytes]:
 
 
 def parse_list(inp: bytes) -> tuple[list[Any], bytes]:
-
-    start = inp.find(b"[")
-    if start == -1:
-        raise ValueError("not a list")
-
     items = []
 
-    rest = inp[start + 1 :]
+    rest = eat(inp, ignore=WS_SET)
+    if not rest.startswith(b"["):
+        raise ValueError("not a list")
+    rest = rest[1:]  # eat b"["
 
     while True:
         item, rest = parse_any(rest)
         items.append(item)
 
-        print(f"{items=} {rest=}")
-        for i in range(len(rest)):
-            curr = rest[i : i + 1]
+        rest = eat(rest, ignore=WS_SET)
 
-            if curr in WS:
-                ...
-            elif curr == b";":
-                rest = rest[i + 1 :]
-                break
-            elif curr == b"]":
-                return items, rest[i + 1 :]
-            else:
-                raise ValueError(f"Unexpected {curr=}")
+        if rest.startswith(b";"):
+            rest = rest[1:]
+        elif rest.startswith(b"]"):
+            return items, rest[1:]
+        else:
+            raise ValueError(f"Unexpected {rest[:20]=}")
 
 
-def parse_dict(inp: bytes) -> tuple[dict[Any], bytes]:
-    raise NotImplementedError()
+def parse_dict(inp: bytes) -> tuple[dict[str, Any], bytes]:
+
+    rest = eat(inp, ignore=WS_SET)
+    if not rest.startswith(b"{"):
+        raise ValueError("not a dict")
+    rest = rest[1:]  # eat b"{"
+    out = {}
+
+    while True:
+        key, rest = parse_string(rest)
+        rest = eat(rest, ignore=WS_SET)
+
+        if not rest.startswith(b"=>"):
+            raise ValueError(f"expected =>, found {rest[:20]=}")
+        rest = rest[2:]  # eat b"=>"
+
+        obj, rest = parse_any(rest)
+
+        out[key] = obj
+
+        rest = eat(rest, ignore=WS_SET)
+
+        if rest.startswith(b"}"):
+            return out, rest[1:]
+
+
+def eat(inp: bytes, ignore: set[bytes]) -> bytes:
+    for i in range(len(inp)):
+        curr = inp[i : i + 1]
+
+        if curr not in ignore:
+            return inp[i:]
+
+    raise ValueError("eof")

@@ -1,6 +1,11 @@
-import base64
-
-from acw.day_04 import parse_bool, parse_int, parse_list, parse_string
+from acw.day_04 import (
+    parse_any,
+    parse_bool,
+    parse_dict,
+    parse_int,
+    parse_list,
+    parse_string,
+)
 
 
 def test_parse_string() -> None:
@@ -27,4 +32,23 @@ def test_parse_list() -> None:
     assert parse_list(b'[ "some"; ["rec";  3]; false  ]') == (
         ["some", ["rec", 3], False],
         b"",
+    )
+
+
+def test_parse_dict() -> None:
+    assert parse_dict(b'{"foo" => "bar"}') == ({"foo": "bar"}, b"")
+    assert parse_dict(b'    {   "foo"  =>    "bar"   } ') == ({"foo": "bar"}, b" ")
+    assert parse_dict(b'    {   "foo"  =>  33   }  ') == ({"foo": 33}, b"  ")
+    assert parse_dict(b'    {   "foo"  =>  33 "bar" => true   }  ') == (
+        {"foo": 33, "bar": True},
+        b"  ",
+    )
+
+
+def test_parse_complex() -> None:
+    assert parse_any(
+        b'{"foo" => 33 "bar" => [1;-3;"true";false] "baz" => {"foobar" => 42}} '
+    ) == (
+        {"foo": 33, "bar": [1, -3, "true", False], "baz": {"foobar": 42}},
+        b" ",
     )
