@@ -1,54 +1,59 @@
 import base64
-import enum
-from itertools import pairwise
+from types import NoneType
 from typing import Any
 
 
 def solve(inp: str) -> str:
-
-    parse(inp)
-
-    raise NotImplementedError()
+    return str(parse(inp))
 
 
-class ObjType(enum.Enum):
-    STRING = 0
-    INT = 1
-    BOOL = 2
-    DICT = 3
-    LIST = 4
+def fingerprint(obj: object) -> int:
+
+    if isinstance(obj, str):
+        return len(obj)
+    elif isinstance(obj, int):
+        return abs(obj)
+    elif isinstance(obj, bool):
+        return int(obj)
+    elif obj is None:
+        return 31
+    elif isinstance(obj, dict):
+        return sum(fingerprint(k) * fingerprint(v) for k, v in obj.items()) + 3
+    elif isinstance(obj, list):
+        return sum(fingerprint(i) for i in obj) + 1
+    else:
+        raise ValueError(f"Unknown object {obj=}")
 
 
-def parse(inp: str) -> None:
+def parse(inp: str) -> int:
 
     raw_bytes = base64.b64decode(inp)
-    print(raw_bytes)
-
     _header, _, rest = chop(raw_bytes, b"\n")
 
     n, _, rest = chop(rest, b"\n")
 
     n = int(n.decode())
 
-    offsets = []
+    starting_offsets = []
     for i in range(n):
         num, _, rest = chop(rest, b"\n")
-        offsets.append(int(num.decode()))
+        starting_offsets.append(int(num.decode()))
 
-    for a, b in pairwise(offsets):
-        obj_bytes = raw_bytes[a:b]
+    sorted_offsets = sorted([x for x in starting_offsets])
+    sorted_offsets.append(len(raw_bytes))
 
-        match decide(obj_bytes):
-            case ObjType.STRING:
-                print(obj_bytes, "string")
-            case ObjType.INT:
-                print(int(obj_bytes.decode()), "int")
-            case ObjType.LIST:
-                print(obj_bytes, "list")
-            case ObjType.DICT:
-                print(obj_bytes, "dict")
+    checksum = 0
 
-        print(raw_bytes[a:b])
+    for obj_id, start in enumerate(starting_offsets):
+        end_idx = sorted_offsets.index(start)
+        end = sorted_offsets[end_idx + 1]
+        obj_bytes = raw_bytes[start:end]
+        print(f"{start=} {end=} {obj_id=} {obj_bytes=}")
+        obj, _ = parse_any(obj_bytes)
+        obj_fgp = fingerprint(obj)
+        checksum += obj_fgp * obj_id
+
+    return checksum
 
 
 def chop(inp: bytes, pattern: bytes) -> tuple[bytes, bytes, bytes]:
@@ -59,47 +64,36 @@ def chop(inp: bytes, pattern: bytes) -> tuple[bytes, bytes, bytes]:
 
 
 def parse_any(inp: bytes) -> tuple[Any, bytes]:
-
-    match decide(inp):
-        case ObjType.STRING:
-            return parse_string(inp)
-        case ObjType.INT:
-            return parse_int(inp)
-        case ObjType.BOOL:
-            return parse_bool(inp)
-        case ObjType.LIST:
-            return parse_list(inp)
-        case ObjType.DICT:
-            return parse_dict(inp)
-
-
-def decide(inp: bytes) -> ObjType:
-    for i in range(len(inp)):
-        match inp[i : i + 1]:
-            case b'"':
-                return ObjType.STRING
-            case (
-                b"+"
-                | b"-"
-                | b"0"
-                | b"1"
-                | b"2"
-                | b"3"
-                | b"4"
-                | b"5"
-                | b"6"
-                | b"7"
-                | b"8"
-                | b"9"
-            ):
-                return ObjType.INT
-            case b"t" | b"f":
-                return ObjType.BOOL
-            case b"[" | b"]":
-                return ObjType.LIST
-            case b"{" | b"}":
-                return ObjType.DICT
-    raise ValueError("eof")
+    rest = consume(inp, ignore=WS)
+    curr = rest[0:1]
+    match curr:
+        case b'"':
+            return parse_string(rest)
+        case (
+            b"+"
+            | b"-"
+            | b"0"
+            | b"1"
+            | b"2"
+            | b"3"
+            | b"4"
+            | b"5"
+            | b"6"
+            | b"7"
+            | b"8"
+            | b"9"
+        ):
+            return parse_int(rest)
+        case b"t" | b"f":
+            return parse_bool(rest)
+        case b"[":
+            return parse_list(rest)
+        case b"{":
+            return parse_dict(rest)
+        case b"n":
+            return parse_nil(rest)
+        case _:
+            raise ValueError(f"unexpected {rest[:20]=}")
 
 
 def parse_int(inp: bytes) -> tuple[int, bytes]:
@@ -132,8 +126,7 @@ def parse_int(inp: bytes) -> tuple[int, bytes]:
         raise ValueError("eof")
 
 
-WS = (b" ", b"\n")
-WS_SET: set[bytes] = set(WS)
+WS: set[bytes] = {b" ", b"\n"}
 
 
 def parse_string(inp: bytes) -> tuple[str, bytes]:
@@ -167,63 +160,66 @@ def parse_string(inp: bytes) -> tuple[str, bytes]:
 
 
 def parse_bool(inp: bytes) -> tuple[bool, bytes]:
-    if (start := inp.find(b"true")) != -1:
-        return True, inp[start + len(b"true") :]
-    elif (start := inp.find(b"false")) != -1:
-        return False, inp[start + len(b"false") :]
+    rest = consume(inp, ignore=WS)
+    if rest.startswith(b"true"):
+        return True, rest[len(b"true") :]
+    elif rest.startswith(b"false"):
+        return False, rest[len(b"false") :]
     else:
         raise ValueError(f"Bool parsing fail for {inp=}")
 
 
-def parse_list(inp: bytes) -> tuple[list[Any], bytes]:
-    items = []
+def parse_nil(inp: bytes) -> tuple[NoneType, bytes]:
+    rest = consume(inp, ignore=WS)
+    if rest.startswith(b"nil"):
+        return None, rest[3:]
+    raise ValueError(f"Nil parsing failed for {inp=}")
 
-    rest = eat(inp, ignore=WS_SET)
+
+def parse_list(inp: bytes) -> tuple[list[Any], bytes]:
+    out = []
+
+    rest = consume(inp, ignore=WS)
     if not rest.startswith(b"["):
         raise ValueError("not a list")
     rest = rest[1:]  # eat b"["
 
     while True:
-        item, rest = parse_any(rest)
-        items.append(item)
+        rest = consume(rest, ignore=WS)
 
-        rest = eat(rest, ignore=WS_SET)
-
-        if rest.startswith(b";"):
+        if rest.startswith(b"]"):
+            return out, rest[1:]
+        elif rest.startswith(b";"):
             rest = rest[1:]
-        elif rest.startswith(b"]"):
-            return items, rest[1:]
         else:
-            raise ValueError(f"Unexpected {rest[:20]=}")
+            item, rest = parse_any(rest)
+            out.append(item)
 
 
 def parse_dict(inp: bytes) -> tuple[dict[str, Any], bytes]:
 
-    rest = eat(inp, ignore=WS_SET)
+    rest = consume(inp, ignore=WS)
     if not rest.startswith(b"{"):
-        raise ValueError("not a dict")
+        raise ValueError(f"not a dict {inp[:20]=}")
     rest = rest[1:]  # eat b"{"
     out = {}
 
     while True:
-        key, rest = parse_string(rest)
-        rest = eat(rest, ignore=WS_SET)
-
-        if not rest.startswith(b"=>"):
-            raise ValueError(f"expected =>, found {rest[:20]=}")
-        rest = rest[2:]  # eat b"=>"
-
-        obj, rest = parse_any(rest)
-
-        out[key] = obj
-
-        rest = eat(rest, ignore=WS_SET)
-
+        rest = consume(rest, ignore=WS)
         if rest.startswith(b"}"):
             return out, rest[1:]
+        else:
+            key, rest = parse_string(rest)
+            rest = consume(rest, ignore=WS)
+            if not rest.startswith(b"=>"):
+                raise ValueError(f"expected =>, found {rest[:20]=}")
+            rest = rest[2:]
+            rest = consume(rest, ignore=WS)
+            obj, rest = parse_any(rest)
+            out[key] = obj
 
 
-def eat(inp: bytes, ignore: set[bytes]) -> bytes:
+def consume(inp: bytes, ignore: set[bytes]) -> bytes:
     for i in range(len(inp)):
         curr = inp[i : i + 1]
 

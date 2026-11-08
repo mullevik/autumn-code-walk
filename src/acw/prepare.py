@@ -9,7 +9,7 @@ def main():
     p.add_argument("day", type=str)
     _args = p.parse_args()
 
-    python_path = Path(f"./acw/{_args.day}.py")
+    python_path = Path(f"./src/acw/day_{_args.day}.py")
     if not python_path.is_file():
         python_path.write_text("def solve(inp: str) -> str:\n    ...")
         print(f"Written {python_path}")

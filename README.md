@@ -4,14 +4,16 @@ My solutions for the famous [Autumn code walk](https://autumncodewalk.github.io/
 
 ## Install
 
-Don't
+```
+uv sync
+```
 
 ## Use
 
 Execute a daily task:
 
 ```
-python3 solve.py 01 inputs/01
+uv run solve 01 inputs/01
 ```
 
 Prepare a daily task:
@@ -20,5 +22,5 @@ Prepare a daily task:
 - creates new template in `acw/`
 
 ```
-python3 prepare.py 01
+uv run prepare 01
 ```
