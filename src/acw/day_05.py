@@ -1,19 +1,17 @@
 from collections import deque
 from collections.abc import Iterable
 from dataclasses import dataclass
-from sre_compile import dis
+from heapq import heappop, heappush
 
 type Vec2 = tuple[int, int]
 
 
-def solve(inp: str) -> str: ...
+def solve(inp: str) -> str:
+    w, s, p, g = parse_world(inp)
+    return str(shortest_distance_a_star(SimState(s, p), g, w))
 
 
-def manhattan(a: Vec2, b: Vec2) -> int:
-    return abs(a[0] - b[0]) + abs(a[1] - b[1])
-
-
-@dataclass(frozen=True)
+@dataclass(frozen=True, order=True)
 class SimState:
     person: Vec2
     package: Vec2
@@ -60,7 +58,28 @@ def get_adjacent_walkable(
             yield adj
 
 
-# def shortest_distance_a_star(start: SimState, goal: Vec2, world: dict[Vec2, str])
+def shortest_distance_a_star(
+    start: SimState, goal: Vec2, world: dict[Vec2, str]
+) -> int:
+    priority_queue = [(manhattan_dist(start.package, goal), start)]
+
+    g_scores = {start: 0}
+
+    while priority_queue:
+        _, curr = heappop(priority_queue)
+
+        if curr.package == goal:
+            return g_scores[curr]
+
+        for adj, adj_dist in get_adjacent_states(curr, world):
+            adj_g_score = g_scores[curr] + adj_dist
+
+            if adj_g_score < g_scores.get(adj, float("inf")):
+                g_scores[adj] = adj_g_score
+                f_score = adj_g_score + manhattan_dist(adj.package, goal)
+                heappush(priority_queue, (f_score, adj))
+
+    return -1
 
 
 def shortest_distance_bfs(
@@ -84,15 +103,27 @@ def shortest_distance_bfs(
     return -1
 
 
-def parse_world(inp: str) -> tuple[dict[Vec2, str], Vec2]:
+def manhattan_dist(a: Vec2, b: Vec2) -> int:
+    return abs(a[0] - b[0]) + abs(a[1] - b[1])
+
+
+def parse_world(inp: str) -> tuple[dict[Vec2, str], Vec2, Vec2, Vec2]:
     world = {}
     package = (-1, -1)
+    start = (-1, -1)
+    goal = (-1, -1)
     for y, row in enumerate(inp.split("\n")):
         for x, char in enumerate(row):
             if char in "*":
                 world[(x, y)] = "."
                 package = (x, y)
+            elif char in "X":
+                world[(x, y)] = "."
+                start = (x, y)
+            elif char in "T":
+                world[(x, y)] = "."
+                goal = (x, y)
             else:
                 world[(x, y)] = char
 
-    return world, package
+    return world, start, package, goal
